@@ -1,0 +1,17 @@
+{
+  "profiles": {
+    "ReverseProxy": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "PROXY_SERVICE1_ENV": "local",
+        "PROXY_SERVICE2_ENV": "local"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "https://localhost:44394"
+    }
+  },
+  "$schema": "https://json.schemastore.org/launchsettings.json"
+}

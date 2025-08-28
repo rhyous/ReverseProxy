@@ -42,7 +42,7 @@
                 }
 
                 // 4. Copy response content efficiently, but skip for responses that must not have content
-                if (!ShouldNotHaveContent(httpResponseMessage.StatusCode))
+                if (ShouldNotHaveContent(httpResponseMessage.StatusCode))
                 {
                     return;
                 }

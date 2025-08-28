@@ -2,7 +2,12 @@ using ReverseProxy;
 
 // 1. Build the App
 var app = WebApplication.CreateBuilder(args).Build();
-app.UseHttpsRedirection();
+
+
+if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISABLE_HTTPS_REDIRECTION")))
+{
+    app.UseHttpsRedirection();
+}
 
 // 2. Get the settings for the proxied services
 var reverseProxySettings = app.Configuration.GetSection(nameof(ReverseProxySettings))

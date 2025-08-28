@@ -30,7 +30,7 @@
                 }
             }
 
-            // 3. Copy content headers (this was missing in the original!)
+            // 3. Copy content headers and body (but not for responses that must not have content)
             if (httpResponseMessage.Content != null)
             {
                 foreach (var header in httpResponseMessage.Content.Headers)
@@ -41,9 +41,31 @@
                     }
                 }
 
-                // 4. Copy response content efficiently
+                // 4. Copy response content efficiently, but skip for responses that must not have content
+                if (!ShouldNotHaveContent(httpResponseMessage.StatusCode))
+                {
+                    return;
+                }
                 await httpResponseMessage.Content.CopyToAsync(response.Body);
             }
+        }
+
+        /// <summary>
+        /// Determines if an HTTP status code should have a message body.
+        /// Per HTTP specs: 1xx, 204, 205, and 304 responses MUST NOT have a message body
+        /// </summary>
+        /// <param name="statusCode">The HTTP status code to check.</param>
+        /// <returns>True if the response should have content, false otherwise.</returns>
+        private static bool ShouldNotHaveContent(System.Net.HttpStatusCode statusCode)
+        {
+            var code = (int)statusCode;
+            
+            // Return false for status codes that MUST NOT have a message body:
+            // 1xx Informational, 204 No Content, 205 Reset Content, 304 Not Modified
+            return (code >= 100 && code <= 199) ||
+                    statusCode == System.Net.HttpStatusCode.NoContent ||
+                    statusCode == System.Net.HttpStatusCode.ResetContent ||
+                    statusCode == System.Net.HttpStatusCode.NotModified;
         }
     }
 }

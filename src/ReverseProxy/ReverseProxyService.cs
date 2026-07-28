@@ -1,11 +1,25 @@
 using Flurl;
 using Flurl.Http;
+using Microsoft.AspNetCore.Http;
 
 namespace ReverseProxy;
 
 /// <summary>Service that handles reverse proxying HTTP requests to proxied services.</summary>
 public class ReverseProxyService
 {
+    private static readonly HashSet<string> HopByHopRequestHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Connection",
+        "Keep-Alive",
+        "Proxy-Authenticate",
+        "Proxy-Authorization",
+        "TE",
+        "Trailers",
+        "Transfer-Encoding",
+        "Upgrade",
+        "Host",
+    };
+
     private readonly string _serviceName;
     private readonly ProxiedService _proxiedService;
 
@@ -26,14 +40,46 @@ public class ReverseProxyService
         try
         {
             var proxiedUrl = GetProxiedUrl(request.Path);
-            var flurResponse = await proxiedUrl
+            var upstreamUri = new Uri(proxiedUrl);
+            var flurlRequest = proxiedUrl
                 .SetQueryParams(request.Query)
-                .WithHeaders(request.Headers)
-                .WithHeaders(_proxiedService.AdditionalHeaders)
+                .WithHeader("Host", upstreamUri.Authority)
                 .WithHeader("X-Forwarded-Path", request.Path)
                 .AllowAnyHttpStatus()
-                .WithAutoRedirect(false)
-                .SendAsync(new HttpMethod(request.Method), new StreamContent(request.Body));
+                .WithAutoRedirect(false);
+
+            foreach (var header in request.Headers)
+            {
+                if (HopByHopRequestHeaders.Contains(header.Key))
+                {
+                    continue;
+                }
+
+                // Flurl stringifies the value, so a string[] would be forwarded as "System.String[]".
+                flurlRequest = flurlRequest.WithHeader(header.Key, header.Value.ToString());
+            }
+
+            // Host is rewritten to the upstream authority, so upstream host-based tenant resolution
+            // depends on X-Forwarded-Host. Keep a client-supplied value; otherwise derive it.
+            var clientForwardedHost = request.Headers["X-Forwarded-Host"].ToString();
+            var forwardedHost = string.IsNullOrEmpty(clientForwardedHost) ? request.Host.Value : clientForwardedHost;
+            if (!string.IsNullOrEmpty(forwardedHost))
+            {
+                flurlRequest = flurlRequest.WithHeader("X-Forwarded-Host", forwardedHost);
+            }
+
+            foreach (var (key, value) in _proxiedService.AdditionalHeaders)
+            {
+                flurlRequest = flurlRequest.WithHeader(key, value);
+            }
+
+            HttpContent? body = null;
+            if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method))
+            {
+                body = new StreamContent(request.Body);
+            }
+
+            var flurResponse = await flurlRequest.SendAsync(new HttpMethod(request.Method), body);
             return flurResponse.ResponseMessage;
         }
         catch (Exception e)

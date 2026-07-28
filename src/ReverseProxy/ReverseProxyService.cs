@@ -17,7 +17,6 @@ public class ReverseProxyService
         "Trailers",
         "Transfer-Encoding",
         "Upgrade",
-        "Host",
     };
 
     private readonly string _serviceName;
@@ -40,10 +39,8 @@ public class ReverseProxyService
         try
         {
             var proxiedUrl = GetProxiedUrl(request.Path);
-            var upstreamUri = new Uri(proxiedUrl);
             var flurlRequest = proxiedUrl
                 .SetQueryParams(request.Query)
-                .WithHeader("Host", upstreamUri.Authority)
                 .WithHeader("X-Forwarded-Path", request.Path)
                 .AllowAnyHttpStatus()
                 .WithAutoRedirect(false);
@@ -59,8 +56,9 @@ public class ReverseProxyService
                 flurlRequest = flurlRequest.WithHeader(header.Key, header.Value.ToString());
             }
 
-            // Host is rewritten to the upstream authority, so upstream host-based tenant resolution
-            // depends on X-Forwarded-Host. Keep a client-supplied value; otherwise derive it.
+            // The original Host is forwarded as-is: upstream builds absolute URLs from it, including the
+            // OIDC redirect_uri, which must match the registered one. Keep a client-supplied
+            // X-Forwarded-Host (in-network callers use it to select a tenant); otherwise derive it.
             var clientForwardedHost = request.Headers["X-Forwarded-Host"].ToString();
             var forwardedHost = string.IsNullOrEmpty(clientForwardedHost) ? request.Host.Value : clientForwardedHost;
             if (!string.IsNullOrEmpty(forwardedHost))
